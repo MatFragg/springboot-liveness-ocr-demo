@@ -35,7 +35,7 @@ build/
 *.json
 google-credentials.json
 kotlindemo-*.json
-src/main/resources/*.json
+!src/main/resources/kotlindemo-483717-de3bd2e2f60c.json
 
 # Logs
 *.log

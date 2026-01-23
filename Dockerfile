@@ -19,6 +19,9 @@ RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 # Copiar el código fuente
 COPY src ./src
 
+# Copiar el archivo de credenciales ANTES de compilar
+COPY src/main/resources/google-credentials.json /tmp/google-credentials.json
+
 # Compilar la aplicación (sin ejecutar tests para build más rápido)
 RUN ./mvnw clean package -DskipTests
 
@@ -38,8 +41,11 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Copiar el JAR compilado desde el stage builder
 COPY --from=builder /app/target/*.jar app.jar
 
-# Crear directorio para credenciales de Google Cloud
-RUN mkdir -p /app/credentials && chown -R spring:spring /app
+# Copiar el archivo de credenciales desde /tmp del stage builder
+COPY --from=builder /tmp/google-credentials.json /app/google-credentials.json
+
+# Cambiar permisos
+RUN chown spring:spring /app/google-credentials.json
 
 # Cambiar a usuario no-root
 USER spring:spring
@@ -57,4 +63,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
 
 # Comando de ejecución
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar app.jar"]
-
