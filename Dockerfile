@@ -20,7 +20,7 @@ RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 COPY src ./src
 
 # Copiar el archivo de credenciales ANTES de compilar
-COPY src/main/resources/google-credentials.json /tmp/google-credentials.json
+# COPY src/main/resources/google-credentials.json /tmp/google-credentials.json
 
 # Compilar la aplicación (sin ejecutar tests para build más rápido)
 RUN ./mvnw clean package -DskipTests
@@ -42,10 +42,10 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/*.jar app.jar
 
 # Copiar el archivo de credenciales desde /tmp del stage builder
-COPY --from=builder /tmp/google-credentials.json /app/google-credentials.json
+# COPY --from=builder /tmp/google-credentials.json /app/google-credentials.json
 
 # Cambiar permisos
-RUN chown spring:spring /app/google-credentials.json
+# RUN chown spring:spring /app/google-credentials.json
 
 # Cambiar a usuario no-root
 USER spring:spring
