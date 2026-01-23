@@ -1,0 +1,65 @@
+# ============================================
+# DOCKERIGNORE - Excluir archivos innecesarios
+# ============================================
+
+# Build outputs
+target/
+build/
+*.jar
+*.war
+*.ear
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+.vscode/
+.settings/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.factorypath
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# Credenciales y archivos sensibles
+*.json
+google-credentials.json
+kotlindemo-*.json
+src/main/resources/*.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
+
+# Scripts
+*.ps1
+*.sh
+
+# Test files
+src/test/
+
+# Maven wrapper jar (ya incluido en .mvn/)
+.mvn/wrapper/maven-wrapper.jar
+
+# Docker
+docker-compose.override.yml
+Dockerfile.dev
+

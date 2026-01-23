@@ -1,0 +1,61 @@
+services:
+  rekodemo-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rekodemo-backend
+
+    # Puerto expuesto
+    ports:
+      - "8081:8081"
+
+    # Variables de entorno desde archivo .env
+    env_file:
+      - .env
+
+    # Variables de entorno adicionales
+    environment:
+      - SPRING_APPLICATION_NAME=RekoDemoBack
+      - SERVER_PORT=8081
+      - JAVA_OPTS=-Xmx1g -Xms512m
+      # Ruta de credenciales de Google Cloud dentro del contenedor
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
+
+    # Volúmenes para montar credenciales de Google Cloud
+    volumes:
+      # Montar archivo de credenciales de Google Cloud (IMPORTANTE: debe existir localmente)
+      # Ajusta la ruta local según donde tengas tu archivo
+      - ./google-credentials.json:/app/credentials/google-credentials.json:ro
+      # Si tienes múltiples archivos de credenciales, agrégalos aquí
+      # - ./kotlindemo-483717-de3bd2e2f60c.json:/app/credentials/kotlindemo.json:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/health/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Reiniciar automáticamente si falla
+    restart: unless-stopped
+
+    # Límites de recursos (opcional pero recomendado)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1536M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Redes
+    networks:
+      - rekodemo-network
+
+# Red personalizada
+networks:
+  rekodemo-network:
+    driver: bridge
+
