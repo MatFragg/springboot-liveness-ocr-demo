@@ -16,7 +16,7 @@ public class ReniecController {
         this.reniecService = reniecService;
     }
 
-    @PostMapping("/v1/facial-biometrics/capture")
+    @PostMapping("/v1/facial-biometrics/capture/try")
     public ResponseEntity<?> validacionFacial(@RequestBody FacialValidationRequest request) {
         try {
             System.out.println("=== Inicio Validación Facial ===");
