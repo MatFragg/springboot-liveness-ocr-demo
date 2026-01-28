@@ -22,10 +22,16 @@ public class ACJAuthService {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private String cachedToken;
+    private long tokenExpiration = 0;
 
-    // Método para obtener el token según
     public String getAccessToken() {
-        if (cachedToken != null) return cachedToken;
+        // Verificar si el token existe Y no ha expirado
+        if (cachedToken != null && System.currentTimeMillis() < tokenExpiration) {
+            return cachedToken;
+        }
+
+        // Token expirado o no existe, obtener uno nuevo
+        System.out.println("🔄 Obteniendo nuevo token de ACJ...");
 
         String url = baseUrl + "/management/v1/access/token";
 
@@ -43,6 +49,9 @@ public class ACJAuthService {
 
         if (response.getBody() != null) {
             this.cachedToken = response.getBody().getAccessToken();
+            // Token válido por 50 minutos (margen de seguridad antes de que expire)
+            this.tokenExpiration = System.currentTimeMillis() + (50 * 60 * 1000);
+            System.out.println("✅ Nuevo token obtenido, expira en 50 minutos");
             return this.cachedToken;
         }
         throw new RuntimeException("No se pudo autenticar con ACJ");
