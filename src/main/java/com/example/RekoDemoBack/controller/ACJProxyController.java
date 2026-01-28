@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/management/v1")  // ← Mismo path base que ACJ
+@RequestMapping("/management/v1")
 @CrossOrigin(origins = "*")
 public class ACJProxyController {
 
@@ -24,7 +24,6 @@ public class ACJProxyController {
         this.faceComparisonService = faceComparisonService;
     }
 
-    // Mismo path que ACJ: /management/v1/access/token
     @PostMapping("/access/token")
     public ResponseEntity<?> getToken(@RequestBody Map<String, String> credentials) {
         try {
@@ -39,7 +38,6 @@ public class ACJProxyController {
         }
     }
 
-    // Mismo path que ACJ: /management/v1/facial-biometrics/compare
     @PostMapping("/facial-biometrics/compare")
     public ResponseEntity<?> compareFaces(@RequestBody CompareProxyRequest request) {
         try {
@@ -47,10 +45,26 @@ public class ACJProxyController {
                     request.getImageFirst(),
                     request.getImageSecond()
             );
-            return ResponseEntity.ok(result);
+
+            // Formato ACJ
+            Map<String, Object> response = Map.of(
+                    "result", Map.of(
+                            "code", result.getResultCode() != null ? result.getResultCode() : "000",
+                            "info", result.getResultMessage() != null ? result.getResultMessage() : "OK"
+                    ),
+                    "data", Map.of(
+                            "similarityScore", result.getSimilarityScore(),
+                            "match", result.isMatch()
+                    )
+            );
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage(), "match", false));
+                    .body(Map.of(
+                            "result", Map.of("code", "ERROR", "info", e.getMessage()),
+                            "data", Map.of("similarityScore", 0.0, "match", false)
+                    ));
         }
     }
 
