@@ -51,7 +51,7 @@ public class ACJAuthService {
             this.cachedToken = response.getBody().getAccessToken();
             // Token válido por 50 minutos (margen de seguridad antes de que expire)
             this.tokenExpiration = System.currentTimeMillis() + (8 * 60 * 1000);
-            System.out.println("✅ Nuevo token obtenido, expira en 50 minutos");
+            System.out.println("✅ Nuevo token obtenido, expira en 10 minutos");
             return this.cachedToken;
         }
         throw new RuntimeException("No se pudo autenticar con ACJ");
