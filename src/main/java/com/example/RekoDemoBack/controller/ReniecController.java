@@ -7,7 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/consultas")
+@RequestMapping("/management")
 @CrossOrigin(origins = "http://localhost:4200")
 public class ReniecController {
     private final ReniecService reniecService;
@@ -16,7 +16,7 @@ public class ReniecController {
         this.reniecService = reniecService;
     }
 
-    @PostMapping("/validacion-facial")
+    @PostMapping("/v1/facial-biometrics/capture")
     public ResponseEntity<?> validacionFacial(@RequestBody FacialValidationRequest request) {
         try {
             System.out.println("=== Inicio Validación Facial ===");
