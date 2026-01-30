@@ -17,12 +17,17 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ConvolveOp;
 
 import java.awt.image.Kernel;
+import java.awt.image.RescaleOp;
 
 import java.io.ByteArrayInputStream;
 
 import java.io.ByteArrayOutputStream;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 
 
@@ -30,11 +35,52 @@ import java.io.IOException;
 
 public class ImagePreprocessingService {
 
+    // Caché de imágenes preprocesadas (hash MD5 -> imagen procesada)
+    private final Map<String, CachedImage> imageCache = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 100;
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+    private static class CachedImage {
+        byte[] data;
+        String filename;
+        String contentType;
+        long timestamp;
+
+        CachedImage(byte[] data, String filename, String contentType) {
+            this.data = data;
+            this.filename = filename;
+            this.contentType = contentType;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CACHE_TTL_MS;
+        }
+    }
+
 
 
     public MultipartFile preprocessImage(MultipartFile originalImage) throws IOException {
 
         try {
+            // Calcular hash MD5 de la imagen original
+            String imageHash = calculateMD5(originalImage.getBytes());
+
+            // Verificar caché
+            CachedImage cached = imageCache.get(imageHash);
+            if (cached != null && !cached.isExpired()) {
+                System.out.println("✅ Imagen encontrada en caché (hash: " + imageHash.substring(0, 8) + "...)");
+                return new CustomMultipartFile(
+                        cached.data,
+                        cached.filename,
+                        cached.contentType
+                );
+            }
+
+            // Limpiar caché si está llena
+            if (imageCache.size() >= MAX_CACHE_SIZE) {
+                cleanExpiredCache();
+            }
 
             System.out.println("🖼️ Preprocesando imagen: " + originalImage.getOriginalFilename());
 
@@ -78,13 +124,16 @@ public class ImagePreprocessingService {
 
             System.out.println("✅ Imagen preprocesada - Nuevo tamaño: " + bytes.length + " bytes");
 
-
+            // Guardar en caché
+            String processedFilename = "processed_" + originalImage.getOriginalFilename();
+            imageCache.put(imageHash, new CachedImage(bytes, processedFilename, originalImage.getContentType()));
+            System.out.println("💾 Imagen guardada en caché (total: " + imageCache.size() + " imágenes)");
 
             return new CustomMultipartFile(
 
                     bytes,
 
-                    "processed_" + originalImage.getOriginalFilename(),
+                    processedFilename,
 
                     originalImage.getContentType()
 
@@ -107,17 +156,18 @@ public class ImagePreprocessingService {
     private BufferedImage applyEnhancementPipeline(BufferedImage image) {
         BufferedImage result = image;
 
-        // 1. Super-Resolución
-        result = upscaleImage(result, 2500);
+        // 1. Super-Resolución OPTIMIZADA (reducida de 2500px a 1600px)
+        result = upscaleImage(result, 1600);
 
-        // 2. Limpieza de ruido (Crucial para webcams)
-        result = reduceNoise(result);
+        // 2. Limpieza de ruido (DESHABILITADA para mejorar rendimiento)
+        // Este filtro es muy costoso (3 bucles anidados sobre millones de píxeles)
+        // result = reduceNoise(result);
 
         // 3. Contraste de bordes (Para el OCR)
         result = enhanceContrast(result);
 
-        // NOTA: Quitamos adjustBrightness de aquí para no quemar el rostro
-        // result = adjustBrightness(result); // <-- ELIMINAR O COMENTAR ESTA LÍNEA
+        // NOTA: adjustBrightness deshabilitado para no quemar el rostro
+        // result = adjustBrightness(result);
 
         // 4. Enfoque
         result = applySharpening(result);
@@ -189,81 +239,24 @@ public class ImagePreprocessingService {
 
 
     private BufferedImage enhanceContrast(BufferedImage image) {
+        // Implementación optimizada usando RescaleOp (operación nativa más rápida)
+        // En lugar de iterar pixel por pixel, usamos operaciones vectorizadas
 
-        BufferedImage contrasted = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        float scaleFactor = 1.2f; // Factor de contraste
+        float offset = -20f;       // Offset para ajustar brillo
 
+        RescaleOp rescaleOp = new RescaleOp(scaleFactor, offset, null);
 
+        BufferedImage contrasted = new BufferedImage(
+            image.getWidth(),
+            image.getHeight(),
+            BufferedImage.TYPE_INT_RGB
+        );
 
-// Encontrar min y max valores de brillo
+        rescaleOp.filter(image, contrasted);
 
-        int min = 255, max = 0;
-
-        for (int y = 0; y < image.getHeight(); y++) {
-
-            for (int x = 0; x < image.getWidth(); x++) {
-
-                int rgb = image.getRGB(x, y);
-
-                int brightness = getBrightness(rgb);
-
-                if (brightness < min) min = brightness;
-
-                if (brightness > max) max = brightness;
-
-            }
-
-        }
-
-
-
-// Aplicar stretch contrast
-
-        double scale = 255.0 / (max - min);
-
-        for (int y = 0; y < image.getHeight(); y++) {
-
-            for (int x = 0; x < image.getWidth(); x++) {
-
-                int rgb = image.getRGB(x, y);
-
-                int r = (rgb >> 16) & 0xFF;
-
-                int g = (rgb >> 8) & 0xFF;
-
-                int b = rgb & 0xFF;
-
-
-
-                r = (int) ((r - min) * scale);
-
-                g = (int) ((g - min) * scale);
-
-                b = (int) ((b - min) * scale);
-
-
-
-                r = clamp(r);
-
-                g = clamp(g);
-
-                b = clamp(b);
-
-
-
-                int newRGB = (r << 16) | (g << 8) | b;
-
-                contrasted.setRGB(x, y, newRGB);
-
-            }
-
-        }
-
-
-
-        System.out.println("🎨 Contraste mejorado: min=" + min + ", max=" + max);
-
+        System.out.println("🎨 Contraste mejorado (optimizado con RescaleOp)");
         return contrasted;
-
     }
 
 
@@ -456,6 +449,27 @@ public class ImagePreprocessingService {
 
         return Math.max(0, Math.min(255, value));
 
+    }
+
+    private String calculateMD5(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] hash = md.digest(data);
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            return String.valueOf(data.length); // Fallback
+        }
+    }
+
+    private void cleanExpiredCache() {
+        imageCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        System.out.println("🧹 Caché limpiada. Imágenes restantes: " + imageCache.size());
     }
 
 

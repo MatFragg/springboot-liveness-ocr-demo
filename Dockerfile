@@ -19,6 +19,7 @@ RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 # Copiar el código fuente
 COPY src ./src
 
+# COMMENT FOR PRODUCTION
 # Copiar el archivo de credenciales ANTES de compilar
 # COPY src/main/resources/google-credentials.json /tmp/google-credentials.json
 
@@ -41,9 +42,11 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Copiar el JAR compilado desde el stage builder
 COPY --from=builder /app/target/*.jar app.jar
 
+# COMMENT FOR PRODUCTION
 # Copiar el archivo de credenciales desde /tmp del stage builder
 # COPY --from=builder /tmp/google-credentials.json /app/google-credentials.json
 
+# COMMENT FOR PRODUCTION
 # Cambiar permisos
 # RUN chown spring:spring /app/google-credentials.json
 
