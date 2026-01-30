@@ -8,6 +8,8 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.util.Base64;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @ConditionalOnProperty(name = "app.dni.mode", havingValue = "mock")
@@ -36,22 +38,59 @@ public class DniProcessingService {
         System.out.println("========================================\n");
 
         try {
-            // 0. PREPROCESAR IMÁGENES
-            System.out.println("🔄 Preprocesando imágenes...");
-            MultipartFile processedFrontImage = imagePreprocessingService.preprocessImage(frontImage);
-            MultipartFile processedBackImage = imagePreprocessingService.preprocessImage(backImage);
-            System.out.println("✅ Imágenes preprocesadas");
+            long startTime = System.currentTimeMillis();
 
-            // 1. EXTRAER TEXTO CON GOOGLE VISION
-            System.out.println("🔍 Extrayendo texto...");
-            /*String frontText = visionService.extractTextFromImageEnhanced(processedFrontImage);
-            String backText = visionService.extractTextFromImageEnhanced(processedBackImage);*/
-            String frontText = documentAiService.extractTextFromImage(processedFrontImage);
-            String backText = documentAiService.extractTextFromImage(processedBackImage);
-            System.out.println("✅ Texto extraído exitosamente");
+            // 0. PREPROCESAR IMÁGENES EN PARALELO
+            System.out.println("🔄 Preprocesando imágenes en paralelo...");
+            CompletableFuture<MultipartFile> frontPreprocessFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return imagePreprocessingService.preprocessImage(frontImage);
+                } catch (Exception e) {
+                    throw new RuntimeException("Error preprocesando imagen frontal", e);
+                }
+            });
+
+            CompletableFuture<MultipartFile> backPreprocessFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return imagePreprocessingService.preprocessImage(backImage);
+                } catch (Exception e) {
+                    throw new RuntimeException("Error preprocesando imagen trasera", e);
+                }
+            });
+
+            MultipartFile processedFrontImage = frontPreprocessFuture.get();
+            MultipartFile processedBackImage = backPreprocessFuture.get();
+            long preprocessTime = System.currentTimeMillis() - startTime;
+            System.out.println("✅ Imágenes preprocesadas en " + preprocessTime + "ms");
+
+            // 1. EXTRAER TEXTO CON GOOGLE DOCUMENT AI EN PARALELO
+            System.out.println("🔍 Extrayendo texto en paralelo...");
+            long ocrStartTime = System.currentTimeMillis();
+
+            CompletableFuture<String> frontTextFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return documentAiService.extractTextFromImage(processedFrontImage);
+                } catch (Exception e) {
+                    throw new RuntimeException("Error extrayendo texto frontal", e);
+                }
+            });
+
+            CompletableFuture<String> backTextFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return documentAiService.extractTextFromImage(processedBackImage);
+                } catch (Exception e) {
+                    throw new RuntimeException("Error extrayendo texto trasero", e);
+                }
+            });
+
+            String frontText = frontTextFuture.get();
+            String backText = backTextFuture.get();
+            long ocrTime = System.currentTimeMillis() - ocrStartTime;
+            System.out.println("✅ Texto extraído exitosamente en " + ocrTime + "ms");
 
             // 2. PARSEAR DATOS DEL DNI
             System.out.println("📊 Parseando datos del DNI...");
+            long parseStartTime = System.currentTimeMillis();
             DniData extractedData = dniParserService.parseDniData(frontText, backText);
 
             if (extractedData == null) {
@@ -69,24 +108,53 @@ public class DniProcessingService {
                 // Aquí podrías agregar una lógica de log para auditoría:
                 // System.out.println("⚠️ Discrepancia detectada. Prevalece MRZ.");
             }
+            long parseTime = System.currentTimeMillis() - parseStartTime;
+            System.out.println("✅ Datos parseados en " + parseTime + "ms");
 
-            // 3. EXTRAER FOTO DE LA PERSONA
-            System.out.println("📸 Extrayendo foto del DNI...");
-            BufferedImage preprocessedBI = ImageIO.read(processedFrontImage.getInputStream());
+            // 3. EXTRAER FOTO Y CONVERTIR IMÁGENES EN PARALELO
+            System.out.println("📸 Procesando imágenes en paralelo...");
+            long imageProcessStartTime = System.currentTimeMillis();
 
-            // Llamamos al método correcto del servicio ImageProcessingService
-            byte[] fotoPersona = imageProcessingService.extractPersonPhoto(preprocessedBI);
-            String fotoPersonaBase64 = Base64.getEncoder().encodeToString(fotoPersona);
-            System.out.println("✅ Foto extraída exitosamente");
+            CompletableFuture<String> photoExtractionFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    BufferedImage preprocessedBI = ImageIO.read(processedFrontImage.getInputStream());
+                    byte[] fotoPersona = imageProcessingService.extractPersonPhoto(preprocessedBI);
+                    return Base64.getEncoder().encodeToString(fotoPersona);
+                } catch (Exception e) {
+                    throw new RuntimeException("Error extrayendo foto", e);
+                }
+            });
 
-            // 4. CONVERTIR IMÁGENES ORIGINALES A BASE64
-            System.out.println("🖼️ Convirtiendo imágenes a Base64...");
-            String frontImageBase64 = Base64.getEncoder().encodeToString(frontImage.getBytes());
-            String backImageBase64 = Base64.getEncoder().encodeToString(backImage.getBytes());
-            System.out.println("✅ Imágenes convertidas");
+            CompletableFuture<String> frontBase64Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return Base64.getEncoder().encodeToString(frontImage.getBytes());
+                } catch (Exception e) {
+                    throw new RuntimeException("Error convirtiendo imagen frontal", e);
+                }
+            });
+
+            CompletableFuture<String> backBase64Future = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return Base64.getEncoder().encodeToString(backImage.getBytes());
+                } catch (Exception e) {
+                    throw new RuntimeException("Error convirtiendo imagen trasera", e);
+                }
+            });
+
+            String fotoPersonaBase64 = photoExtractionFuture.get();
+            String frontImageBase64 = frontBase64Future.get();
+            String backImageBase64 = backBase64Future.get();
+            long imageProcessTime = System.currentTimeMillis() - imageProcessStartTime;
+            System.out.println("✅ Imágenes procesadas en " + imageProcessTime + "ms");
 
             System.out.println("========================================");
             System.out.println("PROCESAMIENTO COMPLETADO");
+            long totalTime = System.currentTimeMillis() - startTime;
+            System.out.println("⏱️ Tiempo total: " + totalTime + "ms");
+            System.out.println("  - Preprocesamiento: " + preprocessTime + "ms");
+            System.out.println("  - OCR: " + ocrTime + "ms");
+            System.out.println("  - Parseo: " + parseTime + "ms");
+            System.out.println("  - Procesamiento imágenes: " + imageProcessTime + "ms");
             System.out.println("========================================\n");
 
             // 5. DEVOLVER DATOS COMPLETOS SIN PERSISTIR
@@ -104,6 +172,10 @@ public class DniProcessingService {
                     backImageBase64
             );
 
+        } catch (InterruptedException | ExecutionException e) {
+            System.err.println("❌ Error en procesamiento paralelo: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error en procesamiento paralelo del DNI", e);
         } catch (Exception e) {
             System.err.println("❌ Error procesando DNI: " + e.getMessage());
             e.printStackTrace();
